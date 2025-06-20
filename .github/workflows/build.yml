@@ -1,0 +1,38 @@
+name: Build and Release
+
+# Controls when the workflow will run
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+
+      - name: Compile application
+        shell: msys2 {0}
+        run: |
+          gcc KeepActive.c -o keep_active.exe -static -lpthread -lws2_32
+          
+      - name: Create ZIP archive
+        run: |
+          Compress-Archive -Path "keep_active.exe" -DestinationPath "keep_active-${{ github.ref_name }}.zip"
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: keep_active-${{ github.ref_name }}.zip
+          generate_release_notes: true
