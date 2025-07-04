@@ -11,7 +11,19 @@
 // --- Global variables ---
 atomic_bool isActive = false;
 wchar_t windowName[256] = L"CounterSide"; // Default/fallback window name
-wchar_t processName[256] = {0}; // Executable name, initially empty
+wchar_t processName[256] = {0};           // Executable name, initially empty
+bool userSpecifiedTarget = false;         // Flag to check if -w or -e was used
+
+// List of default process names to check for if no arguments are given
+const wchar_t* defaultProcessNames[] = {
+    L"CounterSide.exe",
+    L"UmamusumePrettyDerby.exe",
+    L"nikke.exe",
+    L"GF2_Exilium.exe",
+    L"P5X.exe"
+};
+const int numDefaultProcessNames = sizeof(defaultProcessNames) / sizeof(defaultProcessNames[0]);
+
 
 // --- Helper functions for finding window by process name ---
 
@@ -58,7 +70,8 @@ DWORD GetProcessIdByName(const wchar_t* name) {
     // Create a snapshot of all running processes
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "Failed to create process snapshot.\n");
+        // Silently fail, as this function is called frequently.
+        // fprintf(stderr, "Failed to create process snapshot.\n");
         return 0;
     }
 
@@ -88,20 +101,40 @@ void* keepActive(void* arg) {
     while (atomic_load(&isActive)) {
         HWND hwnd = NULL;
 
-        // Priority 1: Try to find the window by process name if specified
-        if (processName[0] != L'\0') {
-            DWORD pid = GetProcessIdByName(processName);
-            if (pid != 0) {
-                // We found the process, now find its main window
-                EnumWindowsData data = { .processId = pid, .hwnd = NULL };
-                EnumWindows(EnumWindowsProc, (LPARAM)&data);
-                hwnd = data.hwnd;
+        // If a user specified a target, use the original logic
+        if (userSpecifiedTarget) {
+            // Priority 1: Try to find by process name if specified
+            if (processName[0] != L'\0') {
+                DWORD pid = GetProcessIdByName(processName);
+                if (pid != 0) {
+                    EnumWindowsData data = { .processId = pid, .hwnd = NULL };
+                    EnumWindows(EnumWindowsProc, (LPARAM)&data);
+                    hwnd = data.hwnd;
+                }
+            }
+            // Priority 2: Fall back to finding by window name
+            if (hwnd == NULL) {
+                hwnd = FindWindowW(NULL, windowName);
             }
         }
-
-        // Priority 2: If not found by process, fall back to finding by window name
-        if (hwnd == NULL) {
-            hwnd = FindWindowW(NULL, windowName);
+        // Otherwise, use the new default fallback logic
+        else {
+            // Priority 1: Iterate through the default process list
+            for (int i = 0; i < numDefaultProcessNames; i++) {
+                DWORD pid = GetProcessIdByName(defaultProcessNames[i]);
+                if (pid != 0) {
+                    EnumWindowsData data = { .processId = pid, .hwnd = NULL };
+                    EnumWindows(EnumWindowsProc, (LPARAM)&data);
+                    hwnd = data.hwnd;
+                    if (hwnd != NULL) {
+                        break; // Found one, stop searching
+                    }
+                }
+            }
+            // Priority 2: Fall back to the default window name if list fails
+            if (hwnd == NULL) {
+                hwnd = FindWindowW(NULL, windowName);
+            }
         }
 
         // If a window handle was found, send the activation message
@@ -124,19 +157,34 @@ int main(int argc, char* argv[]) {
         if (strcmp(argv[i], "-w") == 0 && i + 1 < argc) {
             // Convert multi-byte argument to a wide-character string for the window name
             mbstowcs(windowName, argv[i + 1], strlen(argv[i + 1]) + 1);
+            userSpecifiedTarget = true;
             i++; // Increment i to skip the argument's value
         } else if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
             // Convert multi-byte argument to a wide-character string for the process name
             mbstowcs(processName, argv[i + 1], strlen(argv[i + 1]) + 1);
+            userSpecifiedTarget = true;
             i++; // Increment i to skip the argument's value
         }
     }
 
     printf("Keep Active - C CLI Version\n");
-    if (processName[0] != L'\0') {
-        printf("Target Process: %ls\n", processName);
+    if (userSpecifiedTarget) {
+        if (processName[0] != L'\0') {
+            printf("Target Process: %ls\n", processName);
+        }
+        // Only show window name if it was explicitly set or is the only target
+        if (wcscmp(windowName, L"CounterSide") != 0 || processName[0] == L'\0') {
+            printf("Target/Fallback Window: %ls\n", windowName);
+        }
+    } else {
+        printf("No target specified. Using default search order:\n");
+        printf("1. Default Processes:\n");
+        for (int i = 0; i < numDefaultProcessNames; i++) {
+            printf("   - %ls\n", defaultProcessNames[i]);
+        }
+        printf("2. Fallback Window Title: %ls\n", windowName);
     }
-    printf("Fallback/Target Window: %ls\n", windowName);
+
     printf("----------------------------------------\n");
     printf("Type '1' to turn on, '0' to turn off, 'q' to quit\n");
 
