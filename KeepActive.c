@@ -27,8 +27,8 @@ const int numDefaultProcessNames = sizeof(defaultProcessNames) / sizeof(defaultP
 
 // --- Helper functions for finding window by process name ---
 
-/**
- * @brief A data structure to pass information to the EnumWindows callback.
+/*
+ * A data structure to pass information to the EnumWindows callback.
  * It holds the target process ID and will receive the found window handle.
  */
 typedef struct {
@@ -36,8 +36,8 @@ typedef struct {
     HWND hwnd;
 } EnumWindowsData;
 
-/**
- * @brief A callback function used by EnumWindows.
+/*
+ * A callback function used by EnumWindows.
  * It checks if a given window belongs to the target process ID.
  *
  * @param hwnd Handle to the window being enumerated.
@@ -57,8 +57,8 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     return TRUE; // Continue enumerating
 }
 
-/**
- * @brief Gets the Process ID (PID) for a given executable name.
+/*
+ * Gets the Process ID (PID) for a given executable name.
  *
  * @param name The wide-character string of the executable name (e.g., L"notepad.exe").
  * @return DWORD The process ID if found, otherwise 0.
@@ -93,8 +93,8 @@ DWORD GetProcessIdByName(const wchar_t* name) {
 
 // --- Main application logic ---
 
-/**
- * @brief The main thread function that keeps the target window active.
+/*
+ * The main thread function that keeps the target window active.
  * It periodically finds the window and sends it an activation message.
  */
 void* keepActive(void* arg) {
@@ -148,8 +148,8 @@ void* keepActive(void* arg) {
     return NULL;
 }
 
-/**
- * @brief The main entry point of the application.
+/*
+ * The main entry point of the application.
  */
 int main(int argc, char* argv[]) {
     // Parse command-line arguments for window title (-w) or executable name (-e)
