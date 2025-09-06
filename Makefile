@@ -16,8 +16,7 @@ $(TARGET): $(SOURCE)
 
 # Clean build artifacts
 clean:
-	@if exist $(TARGET) del $(TARGET)
-	@echo Cleaned build artifacts
+	@if [ -f $(TARGET) ]; then rm -f $(TARGET) && echo "Cleaned build artifacts"; else echo "Nothing to clean"; fi
 
 # Install dependencies (placeholder for future use)
 install:
@@ -29,11 +28,11 @@ run: $(TARGET)
 
 # Display help
 help:
-	@echo Available targets:
-	@echo   all      - Build the executable (default)
-	@echo   clean    - Remove build artifacts
-	@echo   install  - Install dependencies (none currently)
-	@echo   run      - Build and run the program
-	@echo   help     - Show this help message
+	@echo "Available targets:"
+	@echo "  all      - Build the executable (default)"
+	@echo "  clean    - Remove build artifacts"
+	@echo "  install  - Install dependencies (none currently)"
+	@echo "  run      - Build and run the program"
+	@echo "  help     - Show this help message"
 
 .PHONY: all clean install run help

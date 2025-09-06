@@ -14,7 +14,23 @@ To compile the program, use the following command:
 gcc -o KeepActive.exe KeepActive.c -lpthread -lws2_32
 ```
 
+Or use the included Makefile:
+
+```
+make
+```
+
 Make sure you have GCC installed and properly set up in your system PATH.
+
+## Automated Builds
+
+This repository includes GitHub Actions for automated building and releasing:
+
+- **Manual Release**: Go to Actions → "Build and Release" → "Run workflow" to create a new release
+- **Automated Compilation**: Uses Windows runner with MinGW GCC
+- **Binary Distribution**: Automatically uploads `KeepActive.exe` to GitHub releases
+
+See [CI_CD_DOCS.md](CI_CD_DOCS.md) for detailed instructions.
 
 ## Usage
 
