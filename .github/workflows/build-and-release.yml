@@ -1,0 +1,77 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+        type: string
+      release_name:
+        description: 'Release name'
+        required: false
+        default: 'KeepActive Release'
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup MinGW
+      uses: egor-tensin/setup-mingw@v2
+      with:
+        platform: x64
+        
+    - name: Build KeepActive
+      run: |
+        # Use Makefile if available, otherwise use direct gcc command
+        if (Test-Path "Makefile") {
+          Write-Host "Using Makefile for build..."
+          make
+        } else {
+          Write-Host "Using direct gcc command for build..."
+          gcc -o KeepActive.exe KeepActive.c -lpthread -lws2_32
+        }
+      shell: powershell
+        
+    - name: Verify build
+      run: |
+        if (Test-Path "KeepActive.exe") {
+          Write-Host "Build successful - KeepActive.exe created"
+          Get-Item KeepActive.exe | Select-Object Name, Length, LastWriteTime
+        } else {
+          Write-Error "Build failed - KeepActive.exe not found"
+          exit 1
+        }
+      shell: powershell
+      
+    - name: Create Release and Upload Asset
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Create release with GitHub CLI
+        gh release create "${{ github.event.inputs.release_tag }}" \
+          --title "${{ github.event.inputs.release_name }}" \
+          --notes "## KeepActive Release ${{ github.event.inputs.release_tag }}
+
+        Automated release of KeepActive - A CLI program to keep specified windows active on Windows.
+
+        ### Download
+        - Download \`KeepActive.exe\` from the assets below
+
+        ### Usage
+        \`\`\`
+        .\KeepActive.exe
+        .\KeepActive.exe -w \"Your Window Name\"
+        .\KeepActive.exe -e \"process.exe\"
+        \`\`\`
+
+        ### Requirements
+        - Windows operating system
+        - No additional dependencies required" \
+          KeepActive.exe
