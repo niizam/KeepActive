@@ -1,47 +1,62 @@
 # Keep Active
-KeepActive is a CLI program written in C that helps me keep a specified window active on Windows. It's particularly useful for applications or games that require constant active window to not get muted. (e.g. CounterSide)
+
+KeepActive is a Windows utility written in Rust that keeps a target application responsive by nudging its main window. It can watch for either a specific executable or a window title, and it now ships with a graphical interface by default while still offering an interactive CLI for power users.
+
+## Features
+
+- GUI front-end with start/stop controls and editable targets
+- CLI mode (`--cli`) that mirrors the legacy behaviour with `1/0/q` commands
+- Targets windows by process name first, falling back to a window title
+- Automatically prompts for elevation and relaunches with administrator rights when required
+- Refresh cadence of 100 ms using Windows APIs (EnumWindows, SendMessage, etc.)
 
 ## Requirements
 
-- Windows
-- GCC compiler with pthreads support
+- Windows 10 or newer
+- [Rust](https://www.rust-lang.org/tools/install) toolchain (edition 2024, Rust 1.82+ recommended)
 
-## Compilation
+## Building
 
-To compile the program, use the following command:
-
-```
-gcc -o KeepActive.exe KeepActive.c -lpthread -lws2_32
+```powershell
+cargo build --release
 ```
 
-Make sure you have GCC installed and properly set up in your system PATH.
+The optimised binary is emitted at `target\release\KeepActive.exe`.
 
-## Usage
+## Running
 
-1. Run the compiled program:
-   ```
-   .\KeepActive
-   ```
-   This will start the program with the default window name "CounterSide".
+### GUI (default)
 
-2. To specify a custom window name, use the `-w` flag followed by the window name:
-   ```
-   .\KeepActive -w "Your Window Name"
-   ```
+```powershell
+cargo run --release
+```
 
-3. Once the program is running, you can use the following commands:
-   - Type `1` and press Enter to start keeping the window active
-   - Type `0` and press Enter to stop keeping the window active
-   - Type `q` and press Enter to quit the program
+Launching the binary directly (`KeepActive.exe`) opens the GUI. Provide a fallback window title and an optional executable name, then press **Start**. The executable name (e.g. `notepad.exe`) is prioritised; the window title is used if no process window is located.
 
-## Contributing
+### CLI mode
 
-Contributions to improve the program are welcome. Please feel free to submit pull requests or open issues for bugs and feature requests.
+```powershell
+cargo run -- --cli [-w "Window Title"] [-e "process.exe"]
+```
+
+- `-w / --window` – fallback window title (defaults to `CounterSide`)
+- `-e / --exe` – executable name to prioritise
+- Commands once running:
+  - `1` – start the activation loop
+  - `0` – stop the activation loop
+  - `q` – quit the application
+
+When launched in CLI mode from the compiled binary, invoke it the same way:
+
+```powershell
+KeepActive.exe --cli -e notepad.exe
+```
+
+## Notes
+
+- The application relaunches itself with "Run as administrator" if it is not already elevated. Accept the UAC prompt to allow it to control other windows.
+- A 100 ms polling interval is used; adjust the source (`src\main.rs`) if you need a different cadence.
 
 ## License
 
-This project is open source and available under the [MIT License](https://opensource.org/licenses/MIT).
-
-## Disclaimer
-
-This software is provided as-is, without any guarantees or warranty. The authors are not responsible for any damage or data loss that may occur from using this program.
+This project is open source and available under the [MIT License](LICENSE).
