@@ -49,59 +49,58 @@ struct Args {
     #[arg(long)]
     cli: bool,
 
-    /// Window title to target (fallback if process is not found)
-    #[arg(short = 'w', long = "window")]
-    window: Option<String>,
+    /// Window titles to target (repeatable; fallback list if processes are not found)
+    #[arg(short = 'w', long = "window", value_name = "TITLE", action = clap::ArgAction::Append)]
+    window: Vec<String>,
 
-    /// Executable name to target (e.g. notepad.exe)
-    #[arg(short = 'e', long = "exe")]
-    exe: Option<String>,
+    /// Executable names to target (repeatable, e.g. notepad.exe)
+    #[arg(short = 'e', long = "exe", value_name = "NAME", action = clap::ArgAction::Append)]
+    exe: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
 struct AppConfig {
-    window_title: String,
-    process_name: Option<String>,
+    window_titles: Vec<String>,
+    process_names: Vec<String>,
 }
 
 impl AppConfig {
     fn from_args(args: &Args) -> Self {
-        let window_title = args
-            .window
-            .clone()
-            .unwrap_or_else(|| DEFAULT_WINDOW_TITLE.to_string());
-        let process_name = args.exe.clone().map(normalize_filter);
+        let mut window_titles = normalize_list(args.window.clone());
+        if window_titles.is_empty() {
+            window_titles.push(DEFAULT_WINDOW_TITLE.to_string());
+        }
+        let process_names = normalize_list(args.exe.clone());
         Self {
-            window_title,
-            process_name,
+            window_titles,
+            process_names,
         }
     }
 
     fn resolved(&self) -> ResolvedConfig {
         ResolvedConfig {
-            window_title: Some(self.window_title.clone()),
-            process_name: self.process_name.clone(),
+            window_titles: self.window_titles.clone(),
+            process_names: self.process_names.clone(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 struct ResolvedConfig {
-    window_title: Option<String>,
-    process_name: Option<String>,
+    window_titles: Vec<String>,
+    process_names: Vec<String>,
 }
 
 impl ResolvedConfig {
-    fn with_inputs(window_title: String, process_name: Option<String>) -> Self {
-        let process_name = process_name.map(normalize_filter);
-        let title = if window_title.trim().is_empty() {
-            DEFAULT_WINDOW_TITLE.to_string()
-        } else {
-            window_title.trim().to_string()
-        };
+    fn with_inputs(window_input: String, exe_input: String) -> Self {
+        let mut window_titles = parse_target_blob(&window_input);
+        if window_titles.is_empty() {
+            window_titles.push(DEFAULT_WINDOW_TITLE.to_string());
+        }
+        let process_names = parse_target_blob(&exe_input);
         Self {
-            window_title: Some(title),
-            process_name,
+            window_titles,
+            process_names,
         }
     }
 }
@@ -169,8 +168,18 @@ fn main() -> Result<()> {
 
 fn run_cli(config: AppConfig) -> Result<()> {
     println!("KeepActive - Rust CLI");
-    println!("Target executable: {}", config.process_name.as_deref().unwrap_or("not set"));
-    println!("Fallback window title: {}", config.window_title);
+    let exe_display = if config.process_names.is_empty() {
+        "not set".to_string()
+    } else {
+        config.process_names.join(", ")
+    };
+    let window_display = if config.window_titles.is_empty() {
+        "not set".to_string()
+    } else {
+        config.window_titles.join(", ")
+    };
+    println!("Target executables: {}", exe_display);
+    println!("Fallback window titles: {}", window_display);
     println!("----------------------------------------");
     println!("Commands: 1 = start, 0 = stop, q = quit");
 
@@ -230,7 +239,7 @@ fn run_gui(config: AppConfig) -> Result<()> {
 
     let mut _window_label = nwg::Label::default();
     nwg::Label::builder()
-        .text("Window Title (fallback)")
+        .text("Window Titles (comma or newline separated)")
         .position((20, 20))
         .size((180, 24))
         .parent(&window)
@@ -239,7 +248,7 @@ fn run_gui(config: AppConfig) -> Result<()> {
 
     let mut window_input = nwg::TextInput::default();
     nwg::TextInput::builder()
-        .text(&config.window_title)
+        .text(&config.window_titles.join(", "))
         .position((20, 48))
         .size((360, 28))
         .parent(&window)
@@ -248,7 +257,7 @@ fn run_gui(config: AppConfig) -> Result<()> {
 
     let mut _exe_label = nwg::Label::default();
     nwg::Label::builder()
-        .text("Executable Name (optional)")
+        .text("Executable Names (comma or newline separated, optional)")
         .position((20, 90))
         .size((200, 24))
         .parent(&window)
@@ -257,7 +266,7 @@ fn run_gui(config: AppConfig) -> Result<()> {
 
     let mut exe_input = nwg::TextInput::default();
     nwg::TextInput::builder()
-        .text(config.process_name.as_deref().unwrap_or(""))
+        .text(&config.process_names.join(", "))
         .position((20, 118))
         .size((360, 28))
         .parent(&window)
@@ -313,46 +322,46 @@ fn run_gui(config: AppConfig) -> Result<()> {
     let ui_state = Rc::clone(&state);
     let handler = nwg::full_bind_event_handler(&window.handle, move |evt, _, handle| {
         use nwg::Event;
-        let mut state = ui_state.borrow_mut();
-        match evt {
-            Event::OnButtonClick => {
-                if handle == state.start_btn.handle {
-                    let window_value = state.window_input.text();
-                    let exe_value = state.exe_input.text();
-                    let exe_value = exe_value.trim().to_string();
-                    let process_name = if exe_value.is_empty() {
-                        None
-                    } else {
-                        Some(exe_value)
-                    };
-                    let config = ResolvedConfig::with_inputs(window_value, process_name);
+        let mut alert: Option<String> = None;
+        {
+            let mut state = ui_state.borrow_mut();
+            match evt {
+                Event::OnButtonClick => {
+                    if handle == state.start_btn.handle {
+                        let window_value = state.window_input.text();
+                        let exe_value = state.exe_input.text();
+                        let config = ResolvedConfig::with_inputs(window_value, exe_value);
 
-                    if let Err(err) = state.controller.start(config) {
-                        let message = format!("Error: {}", err);
-                        state.status_label.set_text(&format!("Status: {}", message));
-                        nwg::simple_message("KeepActive error", &message);
-                    } else {
-                        state.status_label.set_text("Status: Running");
-                        state.start_btn.set_enabled(false);
-                        state.stop_btn.set_enabled(true);
-                    }
-                } else if handle == state.stop_btn.handle {
-                    if let Err(err) = state.controller.stop() {
-                        let message = format!("Error: {}", err);
-                        state.status_label.set_text(&format!("Status: {}", message));
-                        nwg::simple_message("KeepActive error", &message);
-                    } else {
-                        state.status_label.set_text("Status: Not running");
-                        state.start_btn.set_enabled(true);
-                        state.stop_btn.set_enabled(false);
+                        if let Err(err) = state.controller.start(config) {
+                            let message = format!("Error: {}", err);
+                            state.status_label.set_text(&format!("Status: {}", message));
+                            alert = Some(message);
+                        } else {
+                            state.status_label.set_text("Status: Running");
+                            state.start_btn.set_enabled(false);
+                            state.stop_btn.set_enabled(true);
+                        }
+                    } else if handle == state.stop_btn.handle {
+                        if let Err(err) = state.controller.stop() {
+                            let message = format!("Error: {}", err);
+                            state.status_label.set_text(&format!("Status: {}", message));
+                            alert = Some(message);
+                        } else {
+                            state.status_label.set_text("Status: Not running");
+                            state.start_btn.set_enabled(true);
+                            state.stop_btn.set_enabled(false);
+                        }
                     }
                 }
+                Event::OnWindowClose => {
+                    state.controller.stop().ok();
+                    nwg::stop_thread_dispatch();
+                }
+                _ => {}
             }
-            Event::OnWindowClose => {
-                state.controller.stop().ok();
-                nwg::stop_thread_dispatch();
-            }
-            _ => {}
+        }
+        if let Some(message) = alert {
+            nwg::simple_message("KeepActive error", &message);
         }
     });
 
@@ -391,18 +400,19 @@ fn worker_loop(active: Arc<AtomicBool>, config: ResolvedConfig) {
 }
 
 fn find_target_window(config: &ResolvedConfig) -> Option<HWND> {
-    if let Some(process_name) = &config.process_name {
+    for process_name in &config.process_names {
         if let Ok(pid) = find_process_id(process_name) {
             if let Some(hwnd) = find_window_by_pid(pid) {
                 return Some(hwnd);
             }
         }
     }
-    if let Some(window_title) = &config.window_title {
-        find_window_by_title(window_title)
-    } else {
-        None
+    for window_title in &config.window_titles {
+        if let Some(hwnd) = find_window_by_title(window_title) {
+            return Some(hwnd);
+        }
     }
+    None
 }
 
 fn find_process_id(process_name: &str) -> Result<u32> {
@@ -588,6 +598,18 @@ fn quote_argument(arg: &str) -> String {
     }
 }
 
-fn normalize_filter(value: String) -> String {
-    value.trim().to_string()
+fn normalize_list(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn parse_target_blob(raw: &str) -> Vec<String> {
+    raw.split(|c: char| matches!(c, ',' | ';' | '\n' | '\r'))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect()
 }
